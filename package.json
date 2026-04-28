@@ -1,0 +1,28 @@
+{
+  "name": "tamper-proof-document-verification",
+  "version": "1.0.0",
+  "description": "Local final-project demo for off-chain document storage with on-chain hash verification.",
+  "main": "backend/server.js",
+  "scripts": {
+    "compile": "HOME=.hardhat-home hardhat compile",
+    "node": "HOME=.hardhat-home hardhat node",
+    "deploy:localhost": "HOME=.hardhat-home hardhat run scripts/deploy.js --network localhost",
+    "server": "node backend/server.js",
+    "test": "HOME=.hardhat-home hardhat test",
+    "start": "node backend/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "express": "^4.21.2",
+    "multer": "^2.1.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.8",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "chai": "^4.5.0",
+    "hardhat": "^2.22.19",
+    "supertest": "^7.0.0"
+  }
+}

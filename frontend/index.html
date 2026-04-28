@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Verification</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 30px auto;
+      padding: 0 16px;
+      color: #111;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 4px;
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-top: 28px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 4px;
+    }
+
+    form, .box {
+      border: 1px solid #ccc;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+
+    input, button {
+      font-size: 14px;
+      padding: 6px;
+    }
+
+    button {
+      margin-top: 8px;
+      margin-right: 4px;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eee;
+    }
+
+    .hash {
+      font-family: monospace;
+      word-break: break-all;
+      max-width: 280px;
+    }
+
+    select {
+      font-size: 14px;
+      padding: 6px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    #message {
+      white-space: pre-wrap;
+      background: #f5f5f5;
+      border: 1px solid #ccc;
+      padding: 10px;
+      min-height: 48px;
+    }
+
+    #popup {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      max-width: 340px;
+      padding: 10px 14px;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      border: 1px solid #aaa;
+      background: #333;
+      color: #fff;
+      display: none;
+      z-index: 999;
+    }
+
+    #popup.success { background: #1a6e2e; border-color: #14532d; }
+    #popup.error   { background: #b91c1c; border-color: #7f1d1d; }
+
+    #result-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    #result-overlay.hidden { display: none; }
+
+    #result-modal {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 48px 40px 36px;
+      max-width: 520px;
+      width: 90%;
+      text-align: center;
+    }
+
+    #result-status {
+      font-size: 32px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    #result-status.valid   { color: #15803d; }
+    #result-status.invalid { color: #b91c1c; }
+
+    #result-detail {
+      font-size: 15px;
+      color: #333;
+      margin-bottom: 24px;
+    }
+
+    #hash-compare {
+      text-align: left;
+      background: #f5f5f5;
+      border: 1px solid #ccc;
+      padding: 10px 12px;
+      margin-bottom: 24px;
+      font-size: 12px;
+    }
+    #hash-compare table { margin-top: 0; }
+    #hash-compare td { border: none; padding: 3px 0; word-break: break-all; font-family: monospace; }
+    #hash-compare td:first-child {
+      font-family: Arial, sans-serif;
+      color: #555;
+      white-space: nowrap;
+      width: 160px;
+      vertical-align: top;
+      padding-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Document Verification</h1>
+  <p>Files are stored locally. Solidity stores the file hash.</p>
+
+  <h2>Upload Document</h2>
+  <form id="upload-form">
+    <label for="upload-file">File</label>
+    <input id="upload-file" type="file">
+
+    <label for="document-id">Document ID optional</label>
+    <input id="document-id" type="text" placeholder="example: doc1">
+
+    <br>
+    <button type="submit">Upload</button>
+  </form>
+
+  <h2>Verify With Your Own File</h2>
+  <form id="verify-form">
+    <label for="verify-id">Document</label>
+    <select id="verify-id">
+      <option value="">Select a registered document...</option>
+    </select>
+
+    <label for="verify-file">File to compare</label>
+    <input id="verify-file" type="file">
+
+    <br>
+    <button type="submit">Verify Uploaded File</button>
+  </form>
+
+  <h2>Documents</h2>
+  <p>If a file was uploaded by mistake, remove it from the active list. The app removes the local stored file and sends a blockchain transaction marking the record inactive.</p>
+  <button onclick="loadDocuments()">Refresh List</button>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>File Name</th>
+        <th>Uploaded At</th>
+        <th>Hash</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="documents-body">
+      <tr><td colspan="5">Loading...</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Output</h2>
+  <div id="message">Ready.</div>
+
+  <div id="popup"></div>
+
+  <div id="result-overlay" class="hidden" onclick="if(event.target===this)closeResultModal()">
+    <div id="result-modal">
+      <div id="result-status"></div>
+      <div id="result-detail"></div>
+      <div id="hash-compare">
+        <table>
+          <tr><td>Expected (chain):</td><td id="modal-expected"></td></tr>
+          <tr><td>Actual (file):</td>  <td id="modal-actual"></td></tr>
+        </table>
+      </div>
+      <button onclick="closeResultModal()">Close</button>
+    </div>
+  </div>
+
+  <script>
+    const HASH_PASSWORD = "admin";
+
+    const message = document.getElementById("message");
+    const popupEl = document.getElementById("popup");
+    let popupTimer;
+
+    function popup(text, type) {
+      clearTimeout(popupTimer);
+      popupEl.textContent = text;
+      popupEl.className   = type || "";
+      popupEl.style.display = "block";
+      popupTimer = setTimeout(() => { popupEl.style.display = "none"; }, 3500);
+    }
+
+    function show(data) {
+      if (typeof data === "string") {
+        message.textContent = data;
+      } else {
+        message.textContent = JSON.stringify(data, null, 2);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    async function readJson(response) {
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Request failed");
+      }
+      return data;
+    }
+
+    function shortHash(hash) {
+      if (!hash || hash.length <= 18) {
+        return hash;
+      }
+
+      return hash.slice(0, 12) + "..." + hash.slice(-6);
+    }
+
+    function formatDate(timestamp) {
+      if (!timestamp) {
+        return "Unknown";
+      }
+
+      return new Date(Number(timestamp) * 1000).toLocaleString();
+    }
+
+    document.getElementById("upload-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = event.target.querySelector('button[type="submit"]');
+
+      const file = document.getElementById("upload-file").files[0];
+      if (!file) {
+        popup("Please select a file.", "error");
+        return;
+      }
+
+      const documentId = document.getElementById("document-id").value.trim();
+      const form = new FormData();
+
+      form.append("file", file);
+      if (documentId) {
+        form.append("documentId", documentId);
+      }
+
+      try {
+        button.disabled = true;
+        button.textContent = "Uploading...";
+
+        const data = await readJson(await fetch("/documents/upload", {
+          method: "POST",
+          body: form
+        }));
+
+        show(data);
+        popup("Uploaded: " + data.documentId, "success");
+        event.target.reset();
+        await loadDocuments();
+      } catch (error) {
+        show(error.message);
+        popup(error.message, "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Upload";
+      }
+    });
+
+    function showResultModal(data) {
+      const valid = data.valid;
+      const statusEl = document.getElementById("result-status");
+      statusEl.textContent = valid ? "AUTHENTIC" : "INVALID";
+      statusEl.className   = valid ? "valid" : "invalid";
+      document.getElementById("result-detail").textContent = valid
+        ? "Hash matches. Document is authentic."
+        : "Hash does not match. Document may be tampered.";
+      document.getElementById("modal-expected").textContent = data.expectedHash;
+      document.getElementById("modal-actual").textContent   = data.actualHash;
+      document.getElementById("result-overlay").classList.remove("hidden");
+    }
+
+    function closeResultModal() {
+      document.getElementById("result-overlay").classList.add("hidden");
+    }
+
+    document.getElementById("verify-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = event.target.querySelector('button[type="submit"]');
+
+      const documentId = document.getElementById("verify-id").value;
+      if (!documentId) {
+        popup("Please select a document.", "error");
+        return;
+      }
+
+      const file = document.getElementById("verify-file").files[0];
+      if (!file) {
+        popup("Please select a file to compare.", "error");
+        return;
+      }
+
+      const form = new FormData();
+      form.append("file", file);
+
+      try {
+        button.disabled = true;
+        button.textContent = "Verifying...";
+
+        const data = await readJson(await fetch(`/documents/${encodeURIComponent(documentId)}/verify`, {
+          method: "POST",
+          body: form
+        }));
+
+        show(data);
+        showResultModal(data);
+      } catch (error) {
+        show(error.message);
+        popup(error.message, "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Verify Uploaded File";
+      }
+    });
+
+    async function loadDocuments() {
+      const tbody  = document.getElementById("documents-body");
+      const select = document.getElementById("verify-id");
+
+      try {
+        const data      = await readJson(await fetch("/documents"));
+        const documents = data.documents;
+
+        const prevSelection = select.value;
+        select.innerHTML = '<option value="">Select a registered document...</option>' +
+          documents.map((doc) =>
+            `<option value="${escapeHtml(doc.documentId)}">${escapeHtml(doc.fileName)} - ${escapeHtml(doc.documentId)}</option>`
+          ).join("");
+        if (prevSelection) select.value = prevSelection;
+
+        if (documents.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5">No documents uploaded.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = documents.map((doc) => `
+          <tr>
+            <td>${escapeHtml(doc.documentId)}</td>
+            <td>${escapeHtml(doc.fileName)}</td>
+            <td>${escapeHtml(formatDate(doc.timestamp))}</td>
+            <td class="hash" title="${escapeHtml(doc.fileHash)}">${escapeHtml(shortHash(doc.fileHash))}</td>
+            <td>
+              <button data-action="download" data-id="${escapeHtml(doc.documentId)}">Download</button>
+              <button data-action="verify" data-id="${escapeHtml(doc.documentId)}">Verify Stored File</button>
+              <button data-action="show-hash" data-id="${escapeHtml(doc.documentId)}" data-hash="${escapeHtml(doc.fileHash)}">Show Full Hash</button>
+              <button data-action="remove" data-id="${escapeHtml(doc.documentId)}">Remove from Active List</button>
+            </td>
+          </tr>
+        `).join("");
+      } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
+      }
+    }
+
+    document.getElementById("documents-body").addEventListener("click", async (event) => {
+      if (event.target.tagName !== "BUTTON") {
+        return;
+      }
+
+      const documentId = event.target.dataset.id;
+      const action = event.target.dataset.action;
+
+      if (action === "download") {
+        downloadDocument(documentId);
+      } else if (action === "verify") {
+        await verifyStoredDocument(documentId);
+      } else if (action === "show-hash") {
+        const pw = prompt("Password:");
+        if (pw === null) return;
+        if (pw === HASH_PASSWORD) {
+          show({ documentId, fileHash: event.target.dataset.hash });
+        } else {
+          popup("Incorrect password.", "error");
+        }
+      } else if (action === "remove") {
+        await removeDocument(documentId);
+      }
+    });
+
+    function downloadDocument(documentId) {
+      window.location.href = `/documents/${encodeURIComponent(documentId)}/download`;
+    }
+
+    async function verifyStoredDocument(documentId) {
+      try {
+        const data = await readJson(await fetch(`/documents/${encodeURIComponent(documentId)}/verify`, {
+          method: "POST"
+        }));
+
+        show(data);
+        showResultModal(data);
+      } catch (error) {
+        show(error.message);
+        popup(error.message, "error");
+      }
+    }
+
+    async function removeDocument(documentId) {
+      if (!confirm(`Remove ${documentId} from the active list?`)) {
+        return;
+      }
+
+      try {
+        const data = await readJson(await fetch(`/documents/${encodeURIComponent(documentId)}`, {
+          method: "DELETE"
+        }));
+
+        show(data);
+        popup("Removed from active list: " + documentId, "success");
+        await loadDocuments();
+      } catch (error) {
+        show(error.message);
+        popup(error.message, "error");
+      }
+    }
+
+    loadDocuments();
+  </script>
+</body>
+</html>

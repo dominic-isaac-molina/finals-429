@@ -1,0 +1,10 @@
+node_modules/
+artifacts/
+cache/
+coverage/
+.env
+uploads/
+deployments/
+.hardhat-home/
+.tmp-test-uploads/
+.DS_Store
