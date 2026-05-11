@@ -5,6 +5,7 @@
   "main": "frontend/index.html",
   "scripts": {
     "compile": "HOME=.hardhat-home hardhat compile",
+    "dev": "npm run serve",
     "node": "HOME=.hardhat-home hardhat node",
     "deploy:localhost": "HOME=.hardhat-home hardhat run scripts/deploy.js --network localhost",
     "deploy:amoy": "HOME=.hardhat-home hardhat run scripts/deploy.js --network amoy",

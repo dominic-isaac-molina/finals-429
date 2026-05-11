@@ -3,78 +3,91 @@
 Two things get deployed:
 
 1. **The smart contract** to Polygon Amoy (a free Ethereum-compatible testnet).
-2. **The frontend** to Vercel as a static site.
+2. **The site + API** to Vercel — static frontend plus three serverless
+   functions (`/api/info`, `/api/register`, `/api/remove`) that sign on-chain
+   transactions on behalf of visitors. No wallet install required.
 
 Everything is free. No credit card required.
 
 ---
 
-## 1. One-time wallet setup
+## 1. Make a throwaway wallet (one-time)
 
-You only do this once.
+You only need a private key — no MetaMask UI required.
 
-1. **Install [MetaMask](https://metamask.io/download/)** as a browser extension.
-2. Inside MetaMask, click the account icon → **Add account or hardware wallet → Add a new account**. Name it something like *Amoy Deployer*. Treat this account as throwaway — never put real money in it.
-3. **Export the private key for that throwaway account.** In MetaMask:
-   *Account menu → Account details → Show private key*. Paste your password, then copy the key.
-   You'll paste it into `.env` in the next step. Keep it secret.
-4. **Get free Amoy MATIC.** Visit one of:
-   - https://faucet.polygon.technology/ (Amoy network)
-   - https://www.alchemy.com/faucets/polygon-amoy
+From the project folder run:
 
-   Paste your throwaway wallet address. You should receive a small amount of
-   MATIC within ~1 minute. That's enough for hundreds of deploys.
+```bash
+node -e "const w = require('ethers').Wallet.createRandom(); console.log('Address:    ', w.address); console.log('Private key:', w.privateKey)"
+```
+
+You'll see something like:
+
+```
+Address:     0xAbC...0123
+Private key: 0xfedc...64-hex-chars
+```
+
+Save both somewhere safe. Treat the private key like a password — never paste
+it into chat, never commit it to git.
 
 ---
 
-## 2. Deploy the contract
+## 2. Get free Amoy MATIC
 
-From the project root:
+Open https://faucet.polygon.technology/ and paste the **address** (not the
+private key) into it. Pick **Polygon Amoy** as the network. Within ~60 seconds
+you should have testnet MATIC.
+
+This is the wallet that will both deploy the contract *and* sign every
+transaction visitors make. Keep an eye on it: one faucet pull is enough for
+hundreds of registrations, but if it runs dry the site stops working until you
+refill.
+
+---
+
+## 3. Deploy the contract
 
 ```bash
 cp .env.example .env
-# open .env and paste your throwaway wallet's private key into PRIVATE_KEY
+# open .env and paste the private key after PRIVATE_KEY=
 npm install
 npm run compile
 npm run deploy:amoy
 ```
 
-You should see something like:
+You should see:
 
 ```
-DocumentRegistry deployed to 0xAbCd…1234 on amoy
+DocumentRegistry deployed to 0x... on amoy
 Wrote frontend/contract.js
 ```
 
-`frontend/contract.js` now has your deployed address and ABI baked in.
-
-You can also confirm the deploy at
-`https://amoy.polygonscan.com/address/0xAbCd…1234` — paste your address there.
+`frontend/contract.js` now contains your deployed address, the ABI, and the
+public address of the signer.
 
 ---
 
-## 3. Test it locally
+## 4. Test locally with the API
+
+The static-only `npm run serve` works for browsing, but to test the
+register/remove endpoints you need Vercel's local dev server, which runs the
+serverless functions:
 
 ```bash
-npm run serve
+npm install -g vercel
+vercel dev           # the first time, follow the prompts to link the project
 ```
 
-Open http://localhost:3001 and connect MetaMask. Make sure MetaMask is on the
-Polygon Amoy network (the app will offer to switch/add it for you).
-
-Try uploading a small file and clicking *Register on-chain*. MetaMask will pop
-up to sign — confirm. Within a couple of seconds it should appear in
-*Your documents*.
+Open http://localhost:3000 (Vercel's default) and try registering a small file.
 
 ---
 
-## 4. Deploy the frontend to Vercel
+## 5. Deploy the site to Vercel
 
-The frontend is plain static HTML/JS, so this is fast.
+### Option A — GitHub (recommended)
 
-### Option A — the GitHub way (recommended)
-
-1. Push this repo to GitHub.
+1. Push the repo to GitHub.
 2. Go to https://vercel.com → **Sign up with GitHub** (free, no card).
 3. Click **Add New → Project → Import** the repo.
 4. On the import screen:
@@ -82,57 +95,80 @@ The frontend is plain static HTML/JS, so this is fast.
    - **Root Directory:** keep as `./`
    - **Build Command:** leave empty
    - **Output Directory:** `frontend`
-5. Click **Deploy**.
+5. **Environment Variables** — scroll down and add:
+   - `PRIVATE_KEY` = the same key you put in `.env` locally
+   - (optional) `AMOY_RPC_URL` = a private Alchemy/Infura URL if you want
+     stricter rate limits than the public Amoy RPC offers
+6. Click **Deploy**.
 
-You'll get a URL like `your-project.vercel.app`. Visit it, connect MetaMask,
-and your dApp is live.
+You'll get a URL like `your-project.vercel.app`. Open it. No MetaMask, no
+faucet, no install — just hit Register.
 
-### Option B — the CLI way
+### Option B — CLI
 
 ```bash
-npm install -g vercel
-vercel        # walks you through linking the project
-vercel --prod # deploys to production
+vercel              # link the project
+vercel env add PRIVATE_KEY    # paste the key when prompted, scope to all envs
+vercel --prod
 ```
 
 When asked for the output directory, answer `frontend`.
 
 ---
 
-## 5. Updating later
+## 6. Updating later
 
 - **Change frontend code?** Push to GitHub; Vercel auto-redeploys.
-- **Change the contract?** Re-run `npm run deploy:amoy`. This deploys a *new*
-  contract at a new address and rewrites `frontend/contract.js`. Commit and
-  push that file so Vercel picks it up.
-- **Documents already on the old contract** stay on the old address forever
-  (that's blockchains for you). If you want to keep them, don't redeploy.
+- **Change the contract?** Re-run `npm run deploy:amoy`. The script writes a
+  new address into `frontend/contract.js`. Commit + push and Vercel picks it
+  up. Old documents stay on the old address forever — that's blockchains.
 
 ---
 
 ## Costs
 
-- Polygon Amoy MATIC: free from faucets.
-- MetaMask: free.
-- Vercel hobby plan: free.
-- Public Amoy RPC: free.
+| Item | Cost |
+|---|---|
+| Polygon Amoy MATIC | Free from faucet |
+| Vercel hobby plan | Free |
+| Public Amoy RPC | Free |
+| Domain (optional) | Free `.vercel.app` subdomain, or buy your own |
 
-Total: $0.
+Total: **$0**.
 
 ---
 
 ## Troubleshooting
 
-**"insufficient funds for gas"** — Your throwaway wallet ran out of Amoy
-MATIC. Hit the faucet again.
+**"PRIVATE_KEY env var is missing on the server"** — You forgot the
+environment variable on Vercel. Open the project → **Settings → Environment
+Variables** → add `PRIVATE_KEY`. Then redeploy (Vercel won't pick up new env
+vars on existing deployments automatically — trigger a new build).
 
-**MetaMask says "wrong network"** — Click the wallet pill in the app header
-to reconnect; it should prompt you to switch to Amoy.
+**"Server wallet is out of testnet MATIC"** — Hit the faucet again with the
+address shown in the page header.
 
-**Frontend shows "Contract not deployed yet"** — `frontend/contract.js` has
-no address. Run `npm run deploy:amoy` again, then make sure that file was
-committed.
+**"insufficient funds for gas"** locally — Same thing: your throwaway wallet
+needs Amoy MATIC.
+
+**"Contract not deployed yet" banner won't go away** — `frontend/contract.js`
+has an empty `address`. Run `npm run deploy:amoy` again, then commit and
+push.
 
 **Public RPC is rate-limited** — Sign up for a free Alchemy account at
-https://alchemy.com, create an app on Polygon Amoy, and put the HTTPS URL
-into `.env` as `AMOY_RPC_URL`.
+https://alchemy.com, create an app on Polygon Amoy, copy the HTTPS URL, and
+set it as `AMOY_RPC_URL` both locally (in `.env`) and on Vercel.
+
+---
+
+## A note on the architecture
+
+This deploy uses one **shared signer**: every visitor's "register" click is
+signed by the same wallet (your throwaway). The on-chain registry lives under
+that one address. For a demo or class project that's exactly what you want —
+the prof clicks a link, nothing else to set up.
+
+If you ever want each visitor to sign with their *own* wallet (so the
+on-chain owner reflects the actual user), the git history before this commit
+shows the MetaMask-direct version: drop the `/api` folder, point the frontend
+back at `ethers.BrowserProvider`, and you're there.

@@ -4,6 +4,7 @@ window.CONTRACT_CONFIG = {
   address: "",
   chainId: 80002,
   network: "amoy",
+  serverAddress: "",
   abi: [
     {
       "anonymous": false,

@@ -8,12 +8,28 @@ const NETWORK_TO_CHAIN_ID = {
   hardhat: 31337
 };
 
+function hasValidPrivateKey(value) {
+  if (!value) return false;
+
+  const trimmed = value.trim();
+  const withoutPrefix = trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed;
+  return /^[0-9a-fA-F]{64}$/.test(withoutPrefix);
+}
+
 async function main() {
+  if (hre.network.name === "amoy" && !hasValidPrivateKey(process.env.PRIVATE_KEY)) {
+    throw new Error(
+      "PRIVATE_KEY in .env must be the 64-character private key for your throwaway MetaMask account, not the 42-character wallet address. Export it from MetaMask Account details > Show private key, then paste it as PRIVATE_KEY=..."
+    );
+  }
+
   const DocumentRegistry = await hre.ethers.getContractFactory("DocumentRegistry");
+  const [deployer] = await hre.ethers.getSigners();
   const registry = await DocumentRegistry.deploy();
   await registry.waitForDeployment();
 
   const address = await registry.getAddress();
+  const serverAddress = deployer.address;
   const network = hre.network.name;
   const chainId = NETWORK_TO_CHAIN_ID[network] ?? Number(hre.network.config.chainId) ?? null;
   const deployment = {
@@ -45,6 +61,7 @@ async function main() {
     address,
     chainId,
     network,
+    serverAddress,
     abi: artifact.abi
   };
   const frontendDir = path.join(__dirname, "..", "frontend");

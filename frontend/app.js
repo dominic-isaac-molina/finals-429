@@ -1,21 +1,11 @@
 (() => {
   "use strict";
 
-  const AMOY = {
-    chainIdHex: "0x13882", // 80002
-    chainId: 80002,
-    chainName: "Polygon Amoy",
-    nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
-    rpcUrls: ["https://rpc-amoy.polygon.technology"],
-    blockExplorerUrls: ["https://amoy.polygonscan.com/"]
-  };
-
+  const PUBLIC_RPC = "https://rpc-amoy.polygon.technology";
   const cfg = window.CONTRACT_CONFIG || {};
 
   // ---- DOM ----
-  const walletBtn   = document.getElementById("wallet-btn");
-  const walletText  = document.getElementById("wallet-text");
-  const banners     = document.getElementById("setup-banners");
+  const banners      = document.getElementById("setup-banners");
   const registerForm = document.getElementById("register-form");
   const registerBtn  = document.getElementById("register-btn");
   const verifyForm   = document.getElementById("verify-form");
@@ -24,14 +14,12 @@
   const docsBody     = document.getElementById("docs-body");
   const toastEl      = document.getElementById("toast");
   const contractLink = document.getElementById("contract-link");
+  const ownerLabel   = document.getElementById("owner-label");
 
   // ---- State ----
-  let provider = null;        // BrowserProvider
-  let signer = null;
-  let userAddress = null;
-  let contractRead = null;    // contract with provider (read-only)
-  let contractWrite = null;   // contract with signer
-  let cachedDocs = [];
+  let provider = null;
+  let contractRead = null;
+  let serverAddress = null; // wallet address that signs writes server-side
 
   // ---- Utilities ----
   function shortAddr(addr) {
@@ -54,17 +42,17 @@
   }
 
   let toastTimer;
-  function toast(msg, kind) {
+  function toast(msg, kind, opts) {
     clearTimeout(toastTimer);
     toastEl.textContent = msg;
     toastEl.className = "toast " + (kind || "");
     toastEl.style.display = "block";
-    toastTimer = setTimeout(() => { toastEl.style.display = "none"; }, 3800);
+    toastEl.style.cursor = (opts && opts.onClick) ? "pointer" : "default";
+    toastEl.onclick = (opts && opts.onClick) || null;
+    toastTimer = setTimeout(() => { toastEl.style.display = "none"; }, 4500);
   }
 
-  function setBanner(html) {
-    banners.innerHTML = html || "";
-  }
+  function setBanner(html) { banners.innerHTML = html || ""; }
 
   async function hashFile(file) {
     const buf = await file.arrayBuffer();
@@ -77,113 +65,84 @@
     return "0x" + hex;
   }
 
-  function explorerTx(txHash) {
-    return `https://amoy.polygonscan.com/tx/${txHash}`;
+  function explorerTx(txHash) { return `https://amoy.polygonscan.com/tx/${txHash}`; }
+  function explorerAddr(addr) { return `https://amoy.polygonscan.com/address/${addr}`; }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
   }
 
-  function explorerAddr(addr) {
-    return `https://amoy.polygonscan.com/address/${addr}`;
-  }
-
-  // ---- Wallet flow ----
-  async function connectWallet() {
-    if (!window.ethereum) {
-      toast("MetaMask not found. Install it and reload.", "error");
-      window.open("https://metamask.io/download/", "_blank");
-      return;
-    }
-    try {
-      provider = new ethers.BrowserProvider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      signer = await provider.getSigner();
-      userAddress = await signer.getAddress();
-      walletBtn.classList.add("connected");
-      walletText.textContent = shortAddr(userAddress);
-
-      await ensureAmoy();
-      attachContract();
-      await refreshDocs();
-    } catch (err) {
-      toast(err.message || "Wallet connection cancelled.", "error");
-    }
-  }
-
-  async function ensureAmoy() {
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) === AMOY.chainId) {
-      renderBanners();
-      return;
-    }
-    try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: AMOY.chainIdHex }]
-      });
-    } catch (err) {
-      // 4902 = chain not added
-      if (err && (err.code === 4902 || (err.data && err.data.originalError && err.data.originalError.code === 4902))) {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: AMOY.chainIdHex,
-            chainName: AMOY.chainName,
-            nativeCurrency: AMOY.nativeCurrency,
-            rpcUrls: AMOY.rpcUrls,
-            blockExplorerUrls: AMOY.blockExplorerUrls
-          }]
-        });
-      } else {
-        throw err;
-      }
-    }
-    // Refresh signer/provider after switch
-    provider = new ethers.BrowserProvider(window.ethereum);
-    signer = await provider.getSigner();
-    userAddress = await signer.getAddress();
-    renderBanners();
-  }
-
-  function attachContract() {
-    if (!cfg.address) return;
-    contractRead = new ethers.Contract(cfg.address, cfg.abi, provider);
-    contractWrite = new ethers.Contract(cfg.address, cfg.abi, signer);
-    contractLink.href = explorerAddr(cfg.address);
-  }
-
-  function renderBanners() {
+  // ---- Bootstrapping ----
+  async function bootstrap() {
     if (!cfg.address) {
       setBanner(`
         <div class="banner warn">
           <b>Contract not deployed yet.</b>
-          <p>Run <code>npm run deploy:amoy</code> to deploy your copy of the
-          DocumentRegistry contract. The deploy script writes the address into
-          <code>frontend/contract.js</code> automatically.</p>
+          <p>Run <code>npm run deploy:amoy</code> from your terminal, then refresh.
+          The deploy script writes the address into <code>frontend/contract.js</code>.</p>
         </div>
       `);
+      docsBody.innerHTML = '<tr><td colspan="5" class="empty">Waiting for contract address…</td></tr>';
       return;
     }
-    setBanner("");
+
+    provider = new ethers.JsonRpcProvider(PUBLIC_RPC);
+    contractRead = new ethers.Contract(cfg.address, cfg.abi, provider);
+    contractLink.href = explorerAddr(cfg.address);
+
+    // Ask the server for its public address. If /api isn't running (e.g. user
+    // is on `npm run serve` instead of `vercel dev`), fall back to a baked-in
+    // server address if the deploy script wrote one.
+    try {
+      const res = await fetch("/api/info");
+      if (!res.ok) throw new Error("no api");
+      const info = await res.json();
+      serverAddress = info.serverAddress;
+    } catch {
+      serverAddress = cfg.serverAddress || null;
+    }
+
+    if (!serverAddress) {
+      setBanner(`
+        <div class="banner warn">
+          <b>Server signer not configured.</b>
+          <p>Run <code>vercel dev</code> (or deploy to Vercel) so the
+          <code>/api</code> endpoints have a wallet to sign with. Set
+          <code>PRIVATE_KEY</code> in your Vercel project's Environment Variables.</p>
+        </div>
+      `);
+    } else if (ownerLabel) {
+      ownerLabel.textContent = shortAddr(serverAddress);
+      ownerLabel.href = explorerAddr(serverAddress);
+    }
+
+    await refreshDocs();
   }
 
-  // ---- Documents ----
+  // ---- Documents (read directly from chain) ----
   async function refreshDocs() {
-    if (!contractRead || !userAddress) {
-      docsBody.innerHTML = '<tr><td colspan="5" class="empty">Connect your wallet to see your documents.</td></tr>';
+    if (!contractRead || !serverAddress) {
+      docsBody.innerHTML = '<tr><td colspan="5" class="empty">Waiting on configuration…</td></tr>';
       return;
     }
     try {
-      const ids = await contractRead.getDocumentIds(userAddress);
+      const ids = await contractRead.getDocumentIds(serverAddress);
       const items = [];
       for (const id of ids) {
-        const [fileHash, fileName, ts] = await contractRead.getDocument(userAddress, id);
+        const [fileHash, fileName, ts] = await contractRead.getDocument(serverAddress, id);
         items.push({ id, fileHash, fileName, ts: Number(ts) });
       }
-      cachedDocs = items;
+      // Newest first
+      items.sort((a, b) => b.ts - a.ts);
       renderDocs(items);
       renderVerifyOptions(items);
     } catch (err) {
       console.error(err);
-      docsBody.innerHTML = `<tr><td colspan="5" class="empty">Couldn't load documents: ${escapeHtml(err.message)}</td></tr>`;
+      docsBody.innerHTML = `<tr><td colspan="5" class="empty">Couldn't load documents: ${escapeHtml(err.shortMessage || err.message)}</td></tr>`;
     }
   }
 
@@ -217,57 +176,55 @@
     if (prev) verifySelect.value = prev;
   }
 
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
+  // ---- API calls ----
+  async function postJson(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
   }
 
   // ---- Register ----
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!contractWrite) {
-      if (!cfg.address) return toast("Deploy the contract first.", "error");
-      return toast("Connect your wallet first.", "error");
-    }
-    const file = document.getElementById("register-file").files[0];
+    const file  = document.getElementById("register-file").files[0];
     const docId = document.getElementById("register-id").value.trim();
     if (!file || !docId) return toast("Pick a file and an ID.", "error");
 
     try {
       registerBtn.disabled = true;
       registerBtn.textContent = "Hashing…";
-      const hash = await hashFile(file);
+      const fileHash = await hashFile(file);
 
-      registerBtn.textContent = "Waiting for wallet…";
-      const tx = await contractWrite.registerDocument(docId, hash, file.name);
+      registerBtn.textContent = "Submitting…";
+      const data = await postJson("/api/register", {
+        documentId: docId,
+        fileHash,
+        fileName: file.name
+      });
 
-      registerBtn.textContent = "Confirming…";
-      const receipt = await tx.wait();
-
-      toast(`Registered "${docId}". View tx →`, "success");
-      // Make the toast a link
-      toastEl.style.cursor = "pointer";
-      toastEl.onclick = () => window.open(explorerTx(receipt.hash), "_blank");
-
+      toast(`Registered "${docId}". View transaction →`, "success", {
+        onClick: () => window.open(explorerTx(data.txHash), "_blank")
+      });
       registerForm.reset();
       await refreshDocs();
     } catch (err) {
-      console.error(err);
-      const msg = err.shortMessage || err.reason || err.message || "Transaction failed";
-      toast(msg.includes("already exists") ? "That document ID is already used in this wallet." : msg, "error");
+      toast(err.message || "Register failed.", "error");
     } finally {
       registerBtn.disabled = false;
       registerBtn.textContent = "Register on-chain";
     }
   });
 
-  // ---- Verify ----
+  // ---- Verify (purely client-side) ----
   verifyForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!contractRead) return toast("Connect your wallet first.", "error");
+    if (!contractRead || !serverAddress) return toast("App isn't ready yet.", "error");
     const docId = verifySelect.value;
     const file = document.getElementById("verify-file").files[0];
     if (!docId || !file) return toast("Pick a document and a file.", "error");
@@ -275,7 +232,7 @@
     try {
       verifyBtn.disabled = true;
       verifyBtn.textContent = "Checking…";
-      const [expected] = await contractRead.getDocument(userAddress, docId);
+      const [expected] = await contractRead.getDocument(serverAddress, docId);
       const actual = await hashFile(file);
       showResult(expected, actual, file.name);
     } catch (err) {
@@ -317,40 +274,22 @@
       }
     } else if (action === "remove") {
       const id = btn.dataset.id;
-      if (!confirm(`Remove "${id}" from your registry? This sends a transaction.`)) return;
+      if (!confirm(`Remove "${id}" from the registry? This sends a transaction.`)) return;
       try {
         btn.disabled = true;
-        const tx = await contractWrite.deactivateDocument(id);
-        await tx.wait();
-        toast(`Removed "${id}".`, "success");
+        const data = await postJson("/api/remove", { documentId: id });
+        toast(`Removed "${id}". View transaction →`, "success", {
+          onClick: () => window.open(explorerTx(data.txHash), "_blank")
+        });
         await refreshDocs();
       } catch (err) {
-        toast(err.shortMessage || err.message || "Remove failed.", "error");
+        toast(err.message || "Remove failed.", "error");
       } finally {
         btn.disabled = false;
       }
     }
   });
 
-  // ---- Wallet button ----
-  walletBtn.addEventListener("click", () => {
-    if (userAddress) {
-      // open block explorer for the current wallet
-      window.open(explorerAddr(userAddress), "_blank");
-    } else {
-      connectWallet();
-    }
-  });
-
-  // Reload state when account or chain changes.
-  if (window.ethereum) {
-    window.ethereum.on("accountsChanged", () => location.reload());
-    window.ethereum.on("chainChanged", () => location.reload());
-  }
-
   // ---- Init ----
-  renderBanners();
-  if (cfg.address) {
-    contractLink.href = explorerAddr(cfg.address);
-  }
+  bootstrap();
 })();
