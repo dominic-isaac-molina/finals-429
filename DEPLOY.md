@@ -1,5 +1,39 @@
 # Deploying this project
 
+There are two ways to run it:
+
+1. **Free demo mode** — deploy only the frontend to Vercel. It saves document
+   fingerprints in the visitor's browser with `localStorage`, so your professor
+   can register, remove, refresh, and verify files without any crypto funds.
+2. **On-chain mode** — deploy the smart contract to Polygon Amoy and use the
+   Vercel API routes to write to the public testnet.
+
+If faucets are not giving you test MATIC, use **free demo mode**.
+
+---
+
+## Free demo mode for class testing
+
+This costs nothing and needs no wallet funding.
+
+1. Push this repo to GitHub.
+2. Go to https://vercel.com → **Sign up with GitHub**.
+3. Click **Add New → Project → Import** the repo.
+4. Use:
+   - **Framework Preset:** Other
+   - **Root Directory:** `./`
+   - **Build Command:** leave empty
+   - **Output Directory:** `frontend`
+5. Deploy.
+
+Your professor can open the `.vercel.app` URL and test the workflow. The saved
+documents persist in that browser. They are not shared across different
+browsers unless you deploy the on-chain mode below.
+
+---
+
+## On-chain mode
+
 Two things get deployed:
 
 1. **The smart contract** to Polygon Amoy (a free Ethereum-compatible testnet).

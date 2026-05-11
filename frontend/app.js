@@ -1,8 +1,10 @@
 (() => {
   "use strict";
 
-  const PUBLIC_RPC = "https://rpc-amoy.polygon.technology";
   const cfg = window.CONTRACT_CONFIG || {};
+  const PUBLIC_RPC = cfg.network === "localhost"
+    ? "http://127.0.0.1:8545"
+    : "https://rpc-amoy.polygon.technology";
 
   // ---- DOM ----
   const banners      = document.getElementById("setup-banners");
@@ -20,6 +22,8 @@
   let provider = null;
   let contractRead = null;
   let serverAddress = null; // wallet address that signs writes server-side
+  let demoMode = false;
+  const DEMO_STORAGE_KEY = "document-registry-demo-docs";
 
   // ---- Utilities ----
   function shortAddr(addr) {
@@ -65,8 +69,13 @@
     return "0x" + hex;
   }
 
-  function explorerTx(txHash) { return `https://amoy.polygonscan.com/tx/${txHash}`; }
-  function explorerAddr(addr) { return `https://amoy.polygonscan.com/address/${addr}`; }
+  function explorerTx(txHash) {
+    return cfg.network === "localhost" ? "#" : `https://amoy.polygonscan.com/tx/${txHash}`;
+  }
+
+  function explorerAddr(addr) {
+    return cfg.network === "localhost" ? "#" : `https://amoy.polygonscan.com/address/${addr}`;
+  }
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -76,17 +85,41 @@
       .replaceAll('"', "&quot;");
   }
 
+  function loadDemoDocs() {
+    try {
+      const raw = localStorage.getItem(DEMO_STORAGE_KEY);
+      const docs = raw ? JSON.parse(raw) : [];
+      return Array.isArray(docs) ? docs : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveDemoDocs(docs) {
+    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(docs));
+  }
+
+  function getDemoDoc(documentId) {
+    return loadDemoDocs().find(doc => doc.id === documentId);
+  }
+
   // ---- Bootstrapping ----
   async function bootstrap() {
     if (!cfg.address) {
+      demoMode = true;
       setBanner(`
         <div class="banner warn">
-          <b>Contract not deployed yet.</b>
-          <p>Run <code>npm run deploy:amoy</code> from your terminal, then refresh.
-          The deploy script writes the address into <code>frontend/contract.js</code>.</p>
+          <b>Demo mode.</b>
+          <p>This hosted version saves fingerprints in this browser so it can be
+          tested for free. Deploying a contract later switches it to on-chain storage.</p>
         </div>
       `);
-      docsBody.innerHTML = '<tr><td colspan="5" class="empty">Waiting for contract address…</td></tr>';
+      if (contractLink) contractLink.href = "#";
+      if (ownerLabel) {
+        ownerLabel.textContent = "this browser";
+        ownerLabel.removeAttribute("href");
+      }
+      await refreshDocs();
       return;
     }
 
@@ -125,6 +158,13 @@
 
   // ---- Documents (read directly from chain) ----
   async function refreshDocs() {
+    if (demoMode) {
+      const items = loadDemoDocs().sort((a, b) => b.ts - a.ts);
+      renderDocs(items);
+      renderVerifyOptions(items);
+      return;
+    }
+
     if (!contractRead || !serverAddress) {
       docsBody.innerHTML = '<tr><td colspan="5" class="empty">Waiting on configuration…</td></tr>';
       return;
@@ -202,15 +242,31 @@
       const fileHash = await hashFile(file);
 
       registerBtn.textContent = "Submitting…";
-      const data = await postJson("/api/register", {
-        documentId: docId,
-        fileHash,
-        fileName: file.name
-      });
+      if (demoMode) {
+        const docs = loadDemoDocs();
+        if (docs.some(doc => doc.id === docId)) {
+          throw new Error("That document ID is already in use. Pick another.");
+        }
+        docs.push({
+          id: docId,
+          fileHash,
+          fileName: file.name,
+          ts: Math.floor(Date.now() / 1000)
+        });
+        saveDemoDocs(docs);
+        toast(`Registered "${docId}".`, "success");
+      } else {
+        const data = await postJson("/api/register", {
+          documentId: docId,
+          fileHash,
+          fileName: file.name
+        });
 
-      toast(`Registered "${docId}". View transaction →`, "success", {
-        onClick: () => window.open(explorerTx(data.txHash), "_blank")
-      });
+        toast(`Registered "${docId}". View transaction →`, "success", {
+          onClick: cfg.network === "localhost" ? null : () => window.open(explorerTx(data.txHash), "_blank")
+        });
+      }
+
       registerForm.reset();
       await refreshDocs();
     } catch (err) {
@@ -224,7 +280,7 @@
   // ---- Verify (purely client-side) ----
   verifyForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!contractRead || !serverAddress) return toast("App isn't ready yet.", "error");
+    if (!demoMode && (!contractRead || !serverAddress)) return toast("App isn't ready yet.", "error");
     const docId = verifySelect.value;
     const file = document.getElementById("verify-file").files[0];
     if (!docId || !file) return toast("Pick a document and a file.", "error");
@@ -232,7 +288,10 @@
     try {
       verifyBtn.disabled = true;
       verifyBtn.textContent = "Checking…";
-      const [expected] = await contractRead.getDocument(serverAddress, docId);
+      const expected = demoMode
+        ? getDemoDoc(docId)?.fileHash
+        : (await contractRead.getDocument(serverAddress, docId))[0];
+      if (!expected) throw new Error("Document not found.");
       const actual = await hashFile(file);
       showResult(expected, actual, file.name);
     } catch (err) {
@@ -274,13 +333,21 @@
       }
     } else if (action === "remove") {
       const id = btn.dataset.id;
-      if (!confirm(`Remove "${id}" from the registry? This sends a transaction.`)) return;
+      const prompt = demoMode
+        ? `Remove "${id}" from this browser?`
+        : `Remove "${id}" from the registry? This sends a transaction.`;
+      if (!confirm(prompt)) return;
       try {
         btn.disabled = true;
-        const data = await postJson("/api/remove", { documentId: id });
-        toast(`Removed "${id}". View transaction →`, "success", {
-          onClick: () => window.open(explorerTx(data.txHash), "_blank")
-        });
+        if (demoMode) {
+          saveDemoDocs(loadDemoDocs().filter(doc => doc.id !== id));
+          toast(`Removed "${id}".`, "success");
+        } else {
+          const data = await postJson("/api/remove", { documentId: id });
+          toast(`Removed "${id}". View transaction →`, "success", {
+            onClick: cfg.network === "localhost" ? null : () => window.open(explorerTx(data.txHash), "_blank")
+          });
+        }
         await refreshDocs();
       } catch (err) {
         toast(err.message || "Remove failed.", "error");

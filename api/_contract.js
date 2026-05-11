@@ -24,6 +24,16 @@ function loadConfig() {
 function getEnv() {
   const PRIVATE_KEY = (process.env.PRIVATE_KEY || "").trim();
   const AMOY_RPC_URL = process.env.AMOY_RPC_URL || "https://rpc-amoy.polygon.technology";
+  const LOCAL_RPC_URL = process.env.LOCAL_RPC_URL || "http://127.0.0.1:8545";
+  const LOCAL_PRIVATE_KEY = process.env.LOCAL_PRIVATE_KEY || "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+  const cfg = loadConfig();
+  if (cfg.network === "localhost") {
+    return {
+      PRIVATE_KEY: LOCAL_PRIVATE_KEY,
+      RPC_URL: LOCAL_RPC_URL
+    };
+  }
 
   if (!PRIVATE_KEY) {
     throw new Error("PRIVATE_KEY env var is missing on the server.");
@@ -34,7 +44,7 @@ function getEnv() {
     throw new Error("PRIVATE_KEY env var is not a valid 64-character hex key.");
   }
 
-  return { PRIVATE_KEY: normalized, AMOY_RPC_URL };
+  return { PRIVATE_KEY: normalized, RPC_URL: AMOY_RPC_URL };
 }
 
 function getContract({ readOnly } = {}) {
@@ -42,8 +52,8 @@ function getContract({ readOnly } = {}) {
   if (!address) {
     throw new Error("Contract address is empty in frontend/contract.js. Run `npm run deploy:amoy` first.");
   }
-  const { PRIVATE_KEY, AMOY_RPC_URL } = getEnv();
-  const provider = new ethers.JsonRpcProvider(AMOY_RPC_URL);
+  const { PRIVATE_KEY, RPC_URL } = getEnv();
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
   if (readOnly) {
     return { contract: new ethers.Contract(address, abi, provider), provider };
   }

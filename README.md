@@ -42,15 +42,25 @@ backend in front. Impossible to demo from anywhere but your laptop.
 ## Quick start
 
 ```bash
+# Free browser demo mode. Saves fingerprints in this browser with localStorage.
+npm install
+npm run dev
+```
+
+Open http://127.0.0.1:3001. This mode is enough for a professor to test
+registering, saving, removing, and verifying files without faucet MATIC or real
+money.
+
+For on-chain Amoy mode:
+
+```bash
 # Generate a throwaway wallet + fund it from the Amoy faucet, then:
 cp .env.example .env       # paste the private key after PRIVATE_KEY=
 npm install
 npm run compile
 npm run deploy:amoy
 
-# Local dev including the /api endpoints:
-npm install -g vercel
-vercel dev
+npm run dev
 ```
 
 For the full walkthrough — including getting free MATIC, deploying to
