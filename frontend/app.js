@@ -24,6 +24,7 @@
   let serverAddress = null; // wallet address that signs writes server-side
   let demoMode = false;
   const DEMO_STORAGE_KEY = "document-registry-demo-docs";
+  const DEMO_LEDGER_KEY = "document-registry-demo-ledger";
 
   // ---- Utilities ----
   function shortAddr(addr) {
@@ -85,18 +86,51 @@
       .replaceAll('"', "&quot;");
   }
 
-  function loadDemoDocs() {
+  function loadDemoEvents() {
     try {
-      const raw = localStorage.getItem(DEMO_STORAGE_KEY);
-      const docs = raw ? JSON.parse(raw) : [];
-      return Array.isArray(docs) ? docs : [];
+      const ledgerRaw = localStorage.getItem(DEMO_LEDGER_KEY);
+      const ledger = ledgerRaw ? JSON.parse(ledgerRaw) : [];
+      if (Array.isArray(ledger) && ledger.length) return ledger;
+
+      // One-time migration from the older demo list format. This preserves
+      // existing demo entries by turning each one into an append-only event.
+      const oldRaw = localStorage.getItem(DEMO_STORAGE_KEY);
+      const oldDocs = oldRaw ? JSON.parse(oldRaw) : [];
+      if (!Array.isArray(oldDocs) || !oldDocs.length) return [];
+
+      const migrated = oldDocs.map(doc => ({
+        type: "registered",
+        id: doc.id,
+        fileHash: doc.fileHash,
+        fileName: doc.fileName,
+        ts: doc.ts || Math.floor(Date.now() / 1000)
+      }));
+      localStorage.setItem(DEMO_LEDGER_KEY, JSON.stringify(migrated));
+      return migrated;
     } catch {
       return [];
     }
   }
 
-  function saveDemoDocs(docs) {
-    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(docs));
+  function appendDemoEvent(event) {
+    const ledger = loadDemoEvents();
+    ledger.push(event);
+    localStorage.setItem(DEMO_LEDGER_KEY, JSON.stringify(ledger));
+  }
+
+  function loadDemoDocs() {
+    const docs = new Map();
+    for (const event of loadDemoEvents()) {
+      if (event.type === "registered" && !docs.has(event.id)) {
+        docs.set(event.id, {
+          id: event.id,
+          fileHash: event.fileHash,
+          fileName: event.fileName,
+          ts: event.ts
+        });
+      }
+    }
+    return Array.from(docs.values());
   }
 
   function getDemoDoc(documentId) {
@@ -247,13 +281,13 @@
         if (docs.some(doc => doc.id === docId)) {
           throw new Error("That document ID is already in use. Pick another.");
         }
-        docs.push({
+        appendDemoEvent({
+          type: "registered",
           id: docId,
           fileHash,
           fileName: file.name,
           ts: Math.floor(Date.now() / 1000)
         });
-        saveDemoDocs(docs);
         toast(`Registered "${docId}".`, "success");
       } else {
         const data = await postJson("/api/register", {
