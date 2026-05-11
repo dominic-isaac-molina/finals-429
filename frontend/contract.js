@@ -19,22 +19,6 @@ window.CONTRACT_CONFIG = {
       "type": "event"
     },
     {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
-        { "indexed": true, "internalType": "string", "name": "documentId", "type": "string" }
-      ],
-      "name": "DocumentRemoved",
-      "type": "event"
-    },
-    {
-      "inputs": [{ "internalType": "string", "name": "documentId", "type": "string" }],
-      "name": "deactivateDocument",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
       "inputs": [
         { "internalType": "address", "name": "owner", "type": "address" },
         { "internalType": "string", "name": "documentId", "type": "string" }

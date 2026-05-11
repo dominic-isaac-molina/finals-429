@@ -200,7 +200,7 @@
         <td>
           <div class="row-actions">
             <button class="link" data-action="copy" data-hash="${escapeHtml(doc.fileHash)}">Copy hash</button>
-            <button class="link danger" data-action="remove" data-id="${escapeHtml(doc.id)}">Remove</button>
+            <span class="mono">Permanent</span>
           </div>
         </td>
       </tr>
@@ -330,29 +330,6 @@
         toast("Hash copied.", "success");
       } catch {
         toast("Couldn't copy.", "error");
-      }
-    } else if (action === "remove") {
-      const id = btn.dataset.id;
-      const prompt = demoMode
-        ? `Remove "${id}" from this browser?`
-        : `Remove "${id}" from the registry? This sends a transaction.`;
-      if (!confirm(prompt)) return;
-      try {
-        btn.disabled = true;
-        if (demoMode) {
-          saveDemoDocs(loadDemoDocs().filter(doc => doc.id !== id));
-          toast(`Removed "${id}".`, "success");
-        } else {
-          const data = await postJson("/api/remove", { documentId: id });
-          toast(`Removed "${id}". View transaction →`, "success", {
-            onClick: cfg.network === "localhost" ? null : () => window.open(explorerTx(data.txHash), "_blank")
-          });
-        }
-        await refreshDocs();
-      } catch (err) {
-        toast(err.message || "Remove failed.", "error");
-      } finally {
-        btn.disabled = false;
       }
     }
   });

@@ -12,12 +12,11 @@ contract DocumentRegistry {
         string fileName;
         uint256 timestamp;
         bool exists;
-        bool deactivated;
     }
 
     // owner => documentId => Document
     mapping(address => mapping(string => Document)) private documents;
-    // owner => list of their active document IDs
+    // owner => append-only list of their document IDs
     mapping(address => string[]) private ownerIds;
 
     event DocumentRegistered(
@@ -28,26 +27,21 @@ contract DocumentRegistry {
         uint256 timestamp
     );
 
-    event DocumentRemoved(address indexed owner, string indexed documentId);
-
     function registerDocument(
         string calldata documentId,
         bytes32 fileHash,
         string calldata fileName
     ) external {
         Document storage existing = documents[msg.sender][documentId];
-        require(!existing.exists || existing.deactivated, "Document already exists");
+        require(!existing.exists, "Document already exists");
 
         documents[msg.sender][documentId] = Document({
             fileHash: fileHash,
             fileName: fileName,
             timestamp: block.timestamp,
-            exists: true,
-            deactivated: false
+            exists: true
         });
 
-        // Add to the owner's list. Reusing a deactivated slot also re-adds it
-        // since deactivateDocument removed it from the list.
         ownerIds[msg.sender].push(documentId);
 
         emit DocumentRegistered(
@@ -59,36 +53,19 @@ contract DocumentRegistry {
         );
     }
 
-    function deactivateDocument(string calldata documentId) external {
-        Document storage document = documents[msg.sender][documentId];
-        require(document.exists && !document.deactivated, "Document not found");
-        document.deactivated = true;
-
-        string[] storage ids = ownerIds[msg.sender];
-        for (uint256 i = 0; i < ids.length; i++) {
-            if (keccak256(bytes(ids[i])) == keccak256(bytes(documentId))) {
-                ids[i] = ids[ids.length - 1];
-                ids.pop();
-                break;
-            }
-        }
-
-        emit DocumentRemoved(msg.sender, documentId);
-    }
-
     function getDocument(address owner, string calldata documentId)
         external
         view
         returns (bytes32 fileHash, string memory fileName, uint256 timestamp)
     {
         Document storage document = documents[owner][documentId];
-        require(document.exists && !document.deactivated, "Document not found");
+        require(document.exists, "Document not found");
         return (document.fileHash, document.fileName, document.timestamp);
     }
 
     function exists(address owner, string calldata documentId) external view returns (bool) {
         Document storage document = documents[owner][documentId];
-        return document.exists && !document.deactivated;
+        return document.exists;
     }
 
     function getDocumentIds(address owner) external view returns (string[] memory) {

@@ -69,36 +69,28 @@ describe("DocumentRegistry", function () {
       .withArgs(uploader.address, "doc-1", hash, "hello.txt", anyValue);
   });
 
-  it("removes a document from the active list", async function () {
+  it("keeps registered documents permanently available", async function () {
     const [uploader] = await ethers.getSigners();
     const registry = await deployRegistry();
     const hash = ethers.sha256(ethers.toUtf8Bytes("hello"));
 
     await registry.registerDocument("doc-1", hash, "hello.txt");
 
-    await expect(registry.deactivateDocument("doc-1"))
-      .to.emit(registry, "DocumentRemoved")
-      .withArgs(uploader.address, "doc-1");
-
-    expect(await registry.exists(uploader.address, "doc-1")).to.equal(false);
-    expect(await registry.getDocumentCount(uploader.address)).to.equal(0);
-    await expect(registry.getDocument(uploader.address, "doc-1"))
-      .to.be.revertedWith("Document not found");
+    expect(await registry.exists(uploader.address, "doc-1")).to.equal(true);
+    expect(await registry.getDocumentCount(uploader.address)).to.equal(1);
+    expect(await registry.getDocumentIds(uploader.address)).to.deep.equal(["doc-1"]);
+    expect((await registry.getDocument(uploader.address, "doc-1"))[0]).to.equal(hash);
   });
 
-  it("allows a removed document ID to be registered again", async function () {
-    const [uploader] = await ethers.getSigners();
+  it("does not allow a document ID to be reused", async function () {
     const registry = await deployRegistry();
     const oldHash = ethers.sha256(ethers.toUtf8Bytes("old"));
     const newHash = ethers.sha256(ethers.toUtf8Bytes("new"));
 
     await registry.registerDocument("doc-1", oldHash, "old.txt");
-    await registry.deactivateDocument("doc-1");
-    await registry.registerDocument("doc-1", newHash, "new.txt");
 
-    const document = await registry.getDocument(uploader.address, "doc-1");
-    expect(document[0]).to.equal(newHash);
-    expect(document[1]).to.equal("new.txt");
-    expect(await registry.getDocumentCount(uploader.address)).to.equal(1);
+    await expect(
+      registry.registerDocument("doc-1", newHash, "new.txt")
+    ).to.be.revertedWith("Document already exists");
   });
 });

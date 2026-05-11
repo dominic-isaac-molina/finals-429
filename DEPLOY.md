@@ -4,7 +4,7 @@ There are two ways to run it:
 
 1. **Free demo mode** — deploy only the frontend to Vercel. It saves document
    fingerprints in the visitor's browser with `localStorage`, so your professor
-   can register, remove, refresh, and verify files without any crypto funds.
+   can register, refresh, and verify files without any crypto funds.
 2. **On-chain mode** — deploy the smart contract to Polygon Amoy and use the
    Vercel API routes to write to the public testnet.
 
@@ -38,7 +38,7 @@ Two things get deployed:
 
 1. **The smart contract** to Polygon Amoy (a free Ethereum-compatible testnet).
 2. **The site + API** to Vercel — static frontend plus three serverless
-   functions (`/api/info`, `/api/register`, `/api/remove`) that sign on-chain
+   functions (`/api/info`, `/api/register`) that sign on-chain
    transactions on behalf of visitors. No wallet install required.
 
 Everything is free. No credit card required.
@@ -105,8 +105,8 @@ public address of the signer.
 ## 4. Test locally with the API
 
 The static-only `npm run serve` works for browsing, but to test the
-register/remove endpoints you need Vercel's local dev server, which runs the
-serverless functions:
+registration endpoint you need Vercel's local dev server, which runs the
+serverless function:
 
 ```bash
 npm install -g vercel
