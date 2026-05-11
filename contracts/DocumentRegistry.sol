@@ -1,109 +1,101 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+/// @title DocumentRegistry
+/// @notice Stores SHA-256 hashes of documents per uploader. The original files
+///         are never sent on-chain; only their hash, file name, and timestamp.
+///         Each wallet address keeps its own namespace of document IDs, so the
+///         same contract can be shared by many users without collisions.
 contract DocumentRegistry {
     struct Document {
         bytes32 fileHash;
         string fileName;
-        address uploader;
         uint256 timestamp;
-        string storagePointer;
         bool exists;
         bool deactivated;
     }
 
-    mapping(string => Document) private documents;
-    string[] private documentIds;
+    // owner => documentId => Document
+    mapping(address => mapping(string => Document)) private documents;
+    // owner => list of their active document IDs
+    mapping(address => string[]) private ownerIds;
 
     event DocumentRegistered(
+        address indexed owner,
         string indexed documentId,
         bytes32 indexed fileHash,
         string fileName,
-        address indexed uploader,
-        uint256 timestamp,
-        string storagePointer
+        uint256 timestamp
     );
 
-    event DocumentRemoved(string indexed documentId);
+    event DocumentRemoved(address indexed owner, string indexed documentId);
 
     function registerDocument(
         string calldata documentId,
         bytes32 fileHash,
-        string calldata fileName,
-        string calldata storagePointer
+        string calldata fileName
     ) external {
-        require(
-            !documents[documentId].exists || documents[documentId].deactivated,
-            "Document already exists"
-        );
+        Document storage existing = documents[msg.sender][documentId];
+        require(!existing.exists || existing.deactivated, "Document already exists");
 
-        documents[documentId] = Document({
+        documents[msg.sender][documentId] = Document({
             fileHash: fileHash,
             fileName: fileName,
-            uploader: msg.sender,
             timestamp: block.timestamp,
-            storagePointer: storagePointer,
             exists: true,
             deactivated: false
         });
-        documentIds.push(documentId);
+
+        // Add to the owner's list. Reusing a deactivated slot also re-adds it
+        // since deactivateDocument removed it from the list.
+        ownerIds[msg.sender].push(documentId);
 
         emit DocumentRegistered(
+            msg.sender,
             documentId,
             fileHash,
             fileName,
-            msg.sender,
-            block.timestamp,
-            storagePointer
+            block.timestamp
         );
     }
 
     function deactivateDocument(string calldata documentId) external {
-        Document storage document = documents[documentId];
+        Document storage document = documents[msg.sender][documentId];
         require(document.exists && !document.deactivated, "Document not found");
         document.deactivated = true;
 
-        for (uint256 i = 0; i < documentIds.length; i++) {
-            if (keccak256(bytes(documentIds[i])) == keccak256(bytes(documentId))) {
-                documentIds[i] = documentIds[documentIds.length - 1];
-                documentIds.pop();
+        string[] storage ids = ownerIds[msg.sender];
+        for (uint256 i = 0; i < ids.length; i++) {
+            if (keccak256(bytes(ids[i])) == keccak256(bytes(documentId))) {
+                ids[i] = ids[ids.length - 1];
+                ids.pop();
                 break;
             }
         }
 
-        emit DocumentRemoved(documentId);
+        emit DocumentRemoved(msg.sender, documentId);
     }
 
-    function getDocument(string calldata documentId) external view returns (
-        string memory id,
-        bytes32 fileHash,
-        string memory fileName,
-        address uploader,
-        uint256 timestamp,
-        string memory storagePointer
-    ) {
-        Document storage document = documents[documentId];
+    function getDocument(address owner, string calldata documentId)
+        external
+        view
+        returns (bytes32 fileHash, string memory fileName, uint256 timestamp)
+    {
+        Document storage document = documents[owner][documentId];
         require(document.exists && !document.deactivated, "Document not found");
-
-        return (
-            documentId,
-            document.fileHash,
-            document.fileName,
-            document.uploader,
-            document.timestamp,
-            document.storagePointer
-        );
+        return (document.fileHash, document.fileName, document.timestamp);
     }
 
-    function exists(string calldata documentId) external view returns (bool) {
-        return documents[documentId].exists && !documents[documentId].deactivated;
+    function exists(address owner, string calldata documentId) external view returns (bool) {
+        Document storage document = documents[owner][documentId];
+        return document.exists && !document.deactivated;
     }
 
-    function getDocumentIds() external view returns (string[] memory) {
-        return documentIds;
+    function getDocumentIds(address owner) external view returns (string[] memory) {
+        return ownerIds[owner];
     }
 
-    function getDocumentCount() external view returns (uint256) {
-        return documentIds.length;
+    function getDocumentCount(address owner) external view returns (uint256) {
+        return ownerIds[owner].length;
     }
 }

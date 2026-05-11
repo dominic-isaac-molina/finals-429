@@ -8,3 +8,4 @@ deployments/
 .hardhat-home/
 .tmp-test-uploads/
 .DS_Store
+.vercel/
