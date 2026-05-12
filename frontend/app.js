@@ -30,6 +30,7 @@
   const DEMO_STORAGE_KEY = "document-registry-demo-docs";
   const DEMO_LEDGER_KEY  = "document-registry-demo-ledger";
   const THUMBNAIL_KEY    = "document-registry-thumbnails";
+  const HIDDEN_KEY       = "document-registry-hidden";
 
   function shortAddr(addr) {
     if (!addr) return "";
@@ -125,6 +126,17 @@
     try {
       return JSON.parse(localStorage.getItem(THUMBNAIL_KEY) || "{}")[docId] || null;
     } catch { return null; }
+  }
+
+  function getHidden() {
+    try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]")); }
+    catch { return new Set(); }
+  }
+
+  function hideDoc(docId) {
+    const hidden = getHidden();
+    hidden.add(docId);
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden]));
   }
 
   function loadDemoEvents() {
@@ -256,15 +268,20 @@
 
   function renderDocs(items) {
     currentDocs = items;
-    if (!items.length) {
+    const hidden = getHidden();
+    const visible = items.filter(doc => !hidden.has(doc.id));
+    if (!visible.length) {
       docsBody.innerHTML = '<tr><td colspan="5" class="empty">No documents yet. Register one above.</td></tr>';
       return;
     }
-    docsBody.innerHTML = items.map(doc => {
+    docsBody.innerHTML = visible.map(doc => {
       const thumb = getThumbnail(doc.id);
       const thumbHtml = thumb
         ? `<img src="${escapeHtml(thumb)}" style="width:40px;height:40px;object-fit:cover;border:1px solid var(--line);border-radius:2px;vertical-align:middle;margin-right:8px;">`
         : "";
+      const photoBtn = thumb
+        ? ""
+        : `<button class="link" data-action="add-photo" data-id="${escapeHtml(doc.id)}">Add photo</button>`;
       return `
         <tr>
           <td class="doc-id">${escapeHtml(doc.id)}</td>
@@ -274,7 +291,8 @@
           <td>
             <div class="row-actions">
               <button class="link" data-action="copy" data-hash="${escapeHtml(doc.fileHash)}">Copy hash</button>
-              <span class="mono">Permanent</span>
+              ${photoBtn}
+              <button class="link danger" data-action="hide" data-id="${escapeHtml(doc.id)}">Hide</button>
             </div>
           </td>
         </tr>
@@ -404,6 +422,7 @@
     const btn = e.target.closest("button");
     if (!btn) return;
     const action = btn.dataset.action;
+
     if (action === "copy") {
       try {
         await navigator.clipboard.writeText(btn.dataset.hash);
@@ -411,6 +430,27 @@
       } catch {
         toast("Couldn't copy.", "error");
       }
+    }
+
+    if (action === "add-photo") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async () => {
+        const f = input.files[0];
+        if (!f) return;
+        const thumb = await createThumbnail(f);
+        if (thumb) {
+          saveThumbnail(btn.dataset.id, thumb);
+          await refreshDocs();
+        }
+      };
+      input.click();
+    }
+
+    if (action === "hide") {
+      hideDoc(btn.dataset.id);
+      await refreshDocs();
     }
   });
 
