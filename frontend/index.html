@@ -347,6 +347,37 @@
 
     .doc-id { word-break: break-all; }
 
+    .page-intro { margin-bottom: 36px; }
+
+    .page-intro h1 {
+      font-family: "Crimson Pro", "Iowan Old Style", Georgia, serif;
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0 0 10px;
+      letter-spacing: -0.2px;
+    }
+
+    details.info-toggle { font-size: 14px; }
+
+    details.info-toggle summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-size: 13px;
+      user-select: none;
+      list-style: none;
+      display: inline-block;
+    }
+    details.info-toggle summary::-webkit-details-marker { display: none; }
+    details.info-toggle summary::after { content: " ↓"; }
+    details[open].info-toggle summary::after { content: " ↑"; }
+
+    details.info-toggle p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 58ch;
+      line-height: 1.65;
+    }
+
     @media (max-width: 560px) {
       .topbar { padding: 14px 18px; }
       main { padding: 32px 18px 64px; }
@@ -366,13 +397,13 @@
   </div>
 
   <main>
-    <h1>Prove a file hasn't been changed.</h1>
-    <p class="lede">
-      Pick any file. Its SHA-256 fingerprint gets written to the Polygon Amoy
-      testnet. Later, anyone with the same file can recompute the fingerprint
-      and check that it still matches what's on-chain. Files never leave your
-      machine — only the hash is sent.
-    </p>
+    <div class="page-intro">
+      <h1>Tamper-Proof File Records</h1>
+      <details class="info-toggle">
+        <summary>How it works</summary>
+        <p>The browser hashes your file with SHA-256 and registers that fingerprint on the Polygon Amoy testnet. To verify later, re-hash the same file and compare — matching hashes prove the file is unchanged. Files never leave your machine.</p>
+      </details>
+    </div>
 
     <div id="setup-banners"></div>
 
@@ -392,7 +423,6 @@
           <input id="register-id" type="text" placeholder="e.g. thesis-final" required>
         </div>
       </div>
-      <p class="help">The ID is a label of your choosing. It must be unique within your wallet.</p>
       <div style="margin-top: 18px;">
         <button type="submit" id="register-btn">Register on-chain</button>
       </div>
@@ -439,8 +469,7 @@
   </main>
 
   <footer>
-    Open-source, no accounts, no servers. View the
-    <a id="contract-link" href="https://amoy.polygonscan.com/" target="_blank" rel="noopener">contract on Polygonscan</a>.
+    <a id="contract-link" href="https://amoy.polygonscan.com/" target="_blank" rel="noopener">View contract on Polygonscan →</a>
   </footer>
 
   <div id="toast" class="toast"></div>
