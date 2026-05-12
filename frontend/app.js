@@ -26,8 +26,10 @@
   let contractRead = null;
   let serverAddress = null;
   let demoMode = false;
+  let currentDocs = [];
   const DEMO_STORAGE_KEY = "document-registry-demo-docs";
-  const DEMO_LEDGER_KEY = "document-registry-demo-ledger";
+  const DEMO_LEDGER_KEY  = "document-registry-demo-ledger";
+  const THUMBNAIL_KEY    = "document-registry-thumbnails";
 
   function shortAddr(addr) {
     if (!addr) return "";
@@ -86,6 +88,43 @@
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
+  }
+
+  async function createThumbnail(file) {
+    if (!file.type.startsWith("image/")) return null;
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const size = 64;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        const scale = Math.min(size / img.width, size / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
+  function saveThumbnail(docId, dataUrl) {
+    try {
+      const store = JSON.parse(localStorage.getItem(THUMBNAIL_KEY) || "{}");
+      store[docId] = dataUrl;
+      localStorage.setItem(THUMBNAIL_KEY, JSON.stringify(store));
+    } catch {}
+  }
+
+  function getThumbnail(docId) {
+    try {
+      return JSON.parse(localStorage.getItem(THUMBNAIL_KEY) || "{}")[docId] || null;
+    } catch { return null; }
   }
 
   function loadDemoEvents() {
@@ -216,24 +255,31 @@
   }
 
   function renderDocs(items) {
+    currentDocs = items;
     if (!items.length) {
       docsBody.innerHTML = '<tr><td colspan="5" class="empty">No documents yet. Register one above.</td></tr>';
       return;
     }
-    docsBody.innerHTML = items.map(doc => `
-      <tr>
-        <td class="doc-id">${escapeHtml(doc.id)}</td>
-        <td>${escapeHtml(doc.fileName)}</td>
-        <td>${escapeHtml(fmtDate(doc.ts))}</td>
-        <td class="hash-cell mono" title="${escapeHtml(doc.fileHash)}">${escapeHtml(shortHash(doc.fileHash))}</td>
-        <td>
-          <div class="row-actions">
-            <button class="link" data-action="copy" data-hash="${escapeHtml(doc.fileHash)}">Copy hash</button>
-            <span class="mono">Permanent</span>
-          </div>
-        </td>
-      </tr>
-    `).join("");
+    docsBody.innerHTML = items.map(doc => {
+      const thumb = getThumbnail(doc.id);
+      const thumbHtml = thumb
+        ? `<img src="${escapeHtml(thumb)}" style="width:40px;height:40px;object-fit:cover;border:1px solid var(--line);border-radius:2px;vertical-align:middle;margin-right:8px;">`
+        : "";
+      return `
+        <tr>
+          <td class="doc-id">${escapeHtml(doc.id)}</td>
+          <td style="vertical-align:middle;">${thumbHtml}${escapeHtml(doc.fileName)}</td>
+          <td>${escapeHtml(fmtDate(doc.ts))}</td>
+          <td class="hash-cell mono" title="${escapeHtml(doc.fileHash)}">${escapeHtml(shortHash(doc.fileHash))}</td>
+          <td>
+            <div class="row-actions">
+              <button class="link" data-action="copy" data-hash="${escapeHtml(doc.fileHash)}">Copy hash</button>
+              <span class="mono">Permanent</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
   }
 
   function renderVerifyOptions(items) {
@@ -266,7 +312,13 @@
     try {
       registerBtn.disabled = true;
       registerBtn.textContent = "Hashing…";
+
+      if (currentDocs.some(doc => doc.fileName === file.name)) {
+        throw new Error(`"${file.name}" is already registered. Each file name must be unique.`);
+      }
+
       const fileHash = await hashFile(file);
+      const thumbnail = await createThumbnail(file);
 
       registerBtn.textContent = "Submitting…";
       if (demoMode) {
@@ -281,6 +333,7 @@
           fileName: file.name,
           ts: Math.floor(Date.now() / 1000)
         });
+        if (thumbnail) saveThumbnail(docId, thumbnail);
         toast(`Registered "${docId}".`, "success");
       } else {
         const data = await postJson("/api/register", {
@@ -288,6 +341,7 @@
           fileHash,
           fileName: file.name
         });
+        if (thumbnail) saveThumbnail(docId, thumbnail);
 
         toast(`Registered "${docId}". View transaction →`, "success", {
           onClick: cfg.network === "localhost" ? null : () => window.open(explorerTx(data.txHash), "_blank")
@@ -378,6 +432,7 @@
       if (!confirm("Clear all demo data? This can't be undone.")) return;
       localStorage.removeItem(DEMO_LEDGER_KEY);
       localStorage.removeItem(DEMO_STORAGE_KEY);
+      localStorage.removeItem(THUMBNAIL_KEY);
       refreshDocs();
       toast("Demo data cleared.", "success");
     });
