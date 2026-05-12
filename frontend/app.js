@@ -6,7 +6,6 @@
     ? "http://127.0.0.1:8545"
     : "https://rpc-amoy.polygon.technology";
 
-  // ---- DOM ----
   const banners      = document.getElementById("setup-banners");
   const registerForm = document.getElementById("register-form");
   const registerBtn  = document.getElementById("register-btn");
@@ -18,15 +17,13 @@
   const contractLink = document.getElementById("contract-link");
   const ownerLabel   = document.getElementById("owner-label");
 
-  // ---- State ----
   let provider = null;
   let contractRead = null;
-  let serverAddress = null; // wallet address that signs writes server-side
+  let serverAddress = null;
   let demoMode = false;
   const DEMO_STORAGE_KEY = "document-registry-demo-docs";
   const DEMO_LEDGER_KEY = "document-registry-demo-ledger";
 
-  // ---- Utilities ----
   function shortAddr(addr) {
     if (!addr) return "";
     return addr.slice(0, 6) + "…" + addr.slice(-4);
@@ -92,8 +89,6 @@
       const ledger = ledgerRaw ? JSON.parse(ledgerRaw) : [];
       if (Array.isArray(ledger) && ledger.length) return ledger;
 
-      // One-time migration from the older demo list format. This preserves
-      // existing demo entries by turning each one into an append-only event.
       const oldRaw = localStorage.getItem(DEMO_STORAGE_KEY);
       const oldDocs = oldRaw ? JSON.parse(oldRaw) : [];
       if (!Array.isArray(oldDocs) || !oldDocs.length) return [];
@@ -137,7 +132,6 @@
     return loadDemoDocs().find(doc => doc.id === documentId);
   }
 
-  // ---- Bootstrapping ----
   async function bootstrap() {
     if (!cfg.address) {
       demoMode = true;
@@ -161,9 +155,6 @@
     contractRead = new ethers.Contract(cfg.address, cfg.abi, provider);
     contractLink.href = explorerAddr(cfg.address);
 
-    // Ask the server for its public address. If /api isn't running (e.g. user
-    // is on `npm run serve` instead of `vercel dev`), fall back to a baked-in
-    // server address if the deploy script wrote one.
     try {
       const res = await fetch("/api/info");
       if (!res.ok) throw new Error("no api");
@@ -190,7 +181,6 @@
     await refreshDocs();
   }
 
-  // ---- Documents (read directly from chain) ----
   async function refreshDocs() {
     if (demoMode) {
       const items = loadDemoDocs().sort((a, b) => b.ts - a.ts);
@@ -210,7 +200,6 @@
         const [fileHash, fileName, ts] = await contractRead.getDocument(serverAddress, id);
         items.push({ id, fileHash, fileName, ts: Number(ts) });
       }
-      // Newest first
       items.sort((a, b) => b.ts - a.ts);
       renderDocs(items);
       renderVerifyOptions(items);
@@ -250,7 +239,6 @@
     if (prev) verifySelect.value = prev;
   }
 
-  // ---- API calls ----
   async function postJson(url, body) {
     const res = await fetch(url, {
       method: "POST",
@@ -263,7 +251,6 @@
     return data;
   }
 
-  // ---- Register ----
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const file  = document.getElementById("register-file").files[0];
@@ -311,7 +298,6 @@
     }
   });
 
-  // ---- Verify (purely client-side) ----
   verifyForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!demoMode && (!contractRead || !serverAddress)) return toast("App isn't ready yet.", "error");
@@ -353,7 +339,6 @@
     document.getElementById("result-overlay").classList.add("hidden");
   };
 
-  // ---- Row actions ----
   docsBody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
@@ -368,6 +353,5 @@
     }
   });
 
-  // ---- Init ----
   bootstrap();
 })();

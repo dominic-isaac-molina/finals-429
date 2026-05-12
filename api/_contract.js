@@ -1,7 +1,3 @@
-// Shared helper for the Vercel serverless API routes.
-// Reads the contract address + ABI from the same file the frontend uses
-// (frontend/contract.js), so both sides stay in sync after every deploy.
-
 const fs = require("fs");
 const path = require("path");
 const { ethers } = require("ethers");
@@ -14,8 +10,6 @@ function loadConfig() {
   const configPath = path.join(process.cwd(), "frontend", "contract.js");
   const code = fs.readFileSync(configPath, "utf8");
   const sandbox = { window: {} };
-  // The file is one assignment to window.CONTRACT_CONFIG; running it in a
-  // sandboxed Function gives us that object without needing eval.
   new Function("window", code)(sandbox.window);
   cached = sandbox.window.CONTRACT_CONFIG || {};
   return cached;

@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// @title DocumentRegistry
-/// @notice Stores SHA-256 hashes of documents per uploader. The original files
-///         are never sent on-chain; only their hash, file name, and timestamp.
-///         Each wallet address keeps its own namespace of document IDs, so the
-///         same contract can be shared by many users without collisions.
 contract DocumentRegistry {
     struct Document {
         bytes32 fileHash;
