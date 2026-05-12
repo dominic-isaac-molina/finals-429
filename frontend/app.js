@@ -30,7 +30,6 @@
   const DEMO_STORAGE_KEY = "document-registry-demo-docs";
   const DEMO_LEDGER_KEY  = "document-registry-demo-ledger";
   const THUMBNAIL_KEY    = "document-registry-thumbnails";
-  const HIDDEN_KEY       = "document-registry-hidden";
 
   function shortAddr(addr) {
     if (!addr) return "";
@@ -97,17 +96,16 @@
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
-        const size = 64;
+        const max = 480;
+        const scale = Math.min(max / img.width, max / img.height, 1);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
         const canvas = document.createElement("canvas");
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext("2d");
-        const scale = Math.min(size / img.width, size / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
         URL.revokeObjectURL(url);
-        resolve(canvas.toDataURL("image/jpeg", 0.7));
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
       };
       img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
       img.src = url;
@@ -126,17 +124,6 @@
     try {
       return JSON.parse(localStorage.getItem(THUMBNAIL_KEY) || "{}")[docId] || null;
     } catch { return null; }
-  }
-
-  function getHidden() {
-    try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]")); }
-    catch { return new Set(); }
-  }
-
-  function hideDoc(docId) {
-    const hidden = getHidden();
-    hidden.add(docId);
-    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden]));
   }
 
   function loadDemoEvents() {
@@ -268,22 +255,17 @@
 
   function renderDocs(items) {
     currentDocs = items;
-    const hidden = getHidden();
-    const visible = items.filter(doc => !hidden.has(doc.id));
-    if (!visible.length) {
+    if (!items.length) {
       docsBody.innerHTML = '<tr><td colspan="5" class="empty">No documents yet. Register one above.</td></tr>';
       return;
     }
-    docsBody.innerHTML = visible.map(doc => {
+    docsBody.innerHTML = items.map(doc => {
       const thumb = getThumbnail(doc.id);
       const thumbHtml = thumb
-        ? `<img src="${escapeHtml(thumb)}" style="width:40px;height:40px;object-fit:cover;border:1px solid var(--line);border-radius:2px;vertical-align:middle;margin-right:8px;">`
-        : "";
-      const photoBtn = thumb
-        ? ""
-        : `<button class="link" data-action="add-photo" data-id="${escapeHtml(doc.id)}">Add photo</button>`;
+        ? `<img src="${escapeHtml(thumb)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:2px;vertical-align:middle;margin-right:8px;">`
+        : `<span style="display:inline-block;width:36px;height:36px;border:1px dashed var(--line);border-radius:2px;vertical-align:middle;margin-right:8px;line-height:36px;text-align:center;font-size:16px;">📄</span>`;
       return `
-        <tr>
+        <tr data-id="${escapeHtml(doc.id)}" style="cursor:pointer;" title="Click to preview">
           <td class="doc-id">${escapeHtml(doc.id)}</td>
           <td style="vertical-align:middle;">${thumbHtml}${escapeHtml(doc.fileName)}</td>
           <td>${escapeHtml(fmtDate(doc.ts))}</td>
@@ -291,8 +273,6 @@
           <td>
             <div class="row-actions">
               <button class="link" data-action="copy" data-hash="${escapeHtml(doc.fileHash)}">Copy hash</button>
-              ${photoBtn}
-              <button class="link danger" data-action="hide" data-id="${escapeHtml(doc.id)}">Hide</button>
             </div>
           </td>
         </tr>
@@ -418,40 +398,65 @@
     document.getElementById("result-overlay").classList.add("hidden");
   };
 
+  function showPreview(docId) {
+    const doc = currentDocs.find(d => d.id === docId);
+    if (!doc) return;
+    const thumb = getThumbnail(docId);
+    document.getElementById("preview-filename").textContent = doc.fileName;
+    document.getElementById("preview-meta").textContent = `ID: ${doc.id} · Registered ${fmtDate(doc.ts)}`;
+    const area = document.getElementById("preview-image-area");
+    if (thumb) {
+      area.innerHTML = `<img src="${escapeHtml(thumb)}" style="max-width:100%;max-height:380px;border:1px solid var(--line);border-radius:2px;display:block;margin:0 auto;">`;
+    } else {
+      area.innerHTML = `
+        <p style="font-size:13px;color:var(--muted);margin:0 0 12px;">No preview saved yet. Pick the original file to verify and save one.</p>
+        <input type="file" id="preview-file-pick" accept="image/*" style="font-size:13px;">
+        <p id="preview-pick-msg" style="font-size:12px;color:var(--muted);margin-top:8px;"></p>
+      `;
+      document.getElementById("preview-file-pick").onchange = async (ev) => {
+        const f = ev.target.files[0];
+        if (!f) return;
+        const hash = await hashFile(f);
+        const msgEl = document.getElementById("preview-pick-msg");
+        if (hash.toLowerCase() !== doc.fileHash.toLowerCase()) {
+          msgEl.style.color = "var(--invalid)";
+          msgEl.textContent = "Hash doesn't match — that's not the right file.";
+          return;
+        }
+        const t = await createThumbnail(f);
+        if (t) {
+          saveThumbnail(docId, t);
+          closePreview();
+          await refreshDocs();
+          toast("Preview saved.", "success");
+        } else {
+          msgEl.style.color = "var(--muted)";
+          msgEl.textContent = "File matched but it's not an image — no preview to show.";
+        }
+      };
+    }
+    document.getElementById("preview-overlay").classList.remove("hidden");
+  }
+
+  window.closePreview = function () {
+    document.getElementById("preview-overlay").classList.add("hidden");
+  };
+
   docsBody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
-    if (!btn) return;
-    const action = btn.dataset.action;
-
-    if (action === "copy") {
+    if (btn && btn.dataset.action === "copy") {
       try {
         await navigator.clipboard.writeText(btn.dataset.hash);
         toast("Hash copied.", "success");
       } catch {
         toast("Couldn't copy.", "error");
       }
+      return;
     }
+    if (btn) return;
 
-    if (action === "add-photo") {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.onchange = async () => {
-        const f = input.files[0];
-        if (!f) return;
-        const thumb = await createThumbnail(f);
-        if (thumb) {
-          saveThumbnail(btn.dataset.id, thumb);
-          await refreshDocs();
-        }
-      };
-      input.click();
-    }
-
-    if (action === "hide") {
-      hideDoc(btn.dataset.id);
-      await refreshDocs();
-    }
+    const row = e.target.closest("tr[data-id]");
+    if (row) showPreview(row.dataset.id);
   });
 
   fileInput.addEventListener("change", () => {
@@ -473,6 +478,7 @@
       localStorage.removeItem(DEMO_LEDGER_KEY);
       localStorage.removeItem(DEMO_STORAGE_KEY);
       localStorage.removeItem(THUMBNAIL_KEY);
+      localStorage.removeItem("document-registry-hidden");
       refreshDocs();
       toast("Demo data cleared.", "success");
     });
