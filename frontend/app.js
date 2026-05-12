@@ -16,6 +16,11 @@
   const toastEl      = document.getElementById("toast");
   const contractLink = document.getElementById("contract-link");
   const ownerLabel   = document.getElementById("owner-label");
+  const clearDemoBtn = document.getElementById("clear-demo-btn");
+  const fileInput    = document.getElementById("register-file");
+  const filePreview  = document.getElementById("file-preview");
+  const previewImg   = document.getElementById("preview-img");
+  const previewName  = document.getElementById("preview-name");
 
   let provider = null;
   let contractRead = null;
@@ -147,6 +152,7 @@
         ownerLabel.textContent = "this browser";
         ownerLabel.removeAttribute("href");
       }
+      if (clearDemoBtn) clearDemoBtn.style.display = "inline";
       await refreshDocs();
       return;
     }
@@ -289,6 +295,7 @@
       }
 
       registerForm.reset();
+      filePreview.style.display = "none";
       await refreshDocs();
     } catch (err) {
       toast(err.message || "Register failed.", "error");
@@ -352,6 +359,29 @@
       }
     }
   });
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    if (!file) { filePreview.style.display = "none"; return; }
+    previewName.textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+    if (file.type.startsWith("image/")) {
+      previewImg.src = URL.createObjectURL(file);
+      previewImg.style.display = "block";
+    } else {
+      previewImg.style.display = "none";
+    }
+    filePreview.style.display = "block";
+  });
+
+  if (clearDemoBtn) {
+    clearDemoBtn.addEventListener("click", () => {
+      if (!confirm("Clear all demo data? This can't be undone.")) return;
+      localStorage.removeItem(DEMO_LEDGER_KEY);
+      localStorage.removeItem(DEMO_STORAGE_KEY);
+      refreshDocs();
+      toast("Demo data cleared.", "success");
+    });
+  }
 
   bootstrap();
 })();

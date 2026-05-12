@@ -382,6 +382,10 @@
         <div class="field">
           <label for="register-file">File</label>
           <input id="register-file" type="file" required>
+          <div id="file-preview" style="display:none; margin-top:10px;">
+            <img id="preview-img" style="max-height:140px; max-width:100%; border:1px solid var(--line); border-radius:2px; display:none;">
+            <p id="preview-name" class="file-meta"></p>
+          </div>
         </div>
         <div class="field">
           <label for="register-id">Document ID</label>
@@ -414,7 +418,10 @@
       </div>
     </form>
 
-    <div class="section-label">Your documents</div>
+    <div class="section-label" style="display:flex; align-items:center; justify-content:space-between; padding-right:0;">
+      <span>Your documents</span>
+      <button id="clear-demo-btn" class="link danger" style="display:none; text-transform:none; letter-spacing:0; font-size:12px;">Clear demo data</button>
+    </div>
     <table>
       <thead>
         <tr>
