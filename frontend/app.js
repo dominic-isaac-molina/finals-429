@@ -222,7 +222,27 @@
       ownerLabel.href = explorerAddr(serverAddress);
     }
 
+    await syncServerThumbnails();
     await refreshDocs();
+  }
+
+  async function syncServerThumbnails() {
+    try {
+      const res = await fetch("/api/thumbnail");
+      if (!res.ok) return;
+      const store = await res.json();
+      for (const [id, thumb] of Object.entries(store)) {
+        if (!getThumbnail(id)) saveThumbnail(id, thumb);
+      }
+    } catch {}
+  }
+
+  function pushThumbnailToServer(docId, thumbnail) {
+    fetch("/api/thumbnail", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ docId, thumbnail })
+    }).catch(() => {});
   }
 
   async function refreshDocs() {
@@ -331,7 +351,7 @@
           fileName: file.name,
           ts: Math.floor(Date.now() / 1000)
         });
-        if (thumbnail) saveThumbnail(docId, thumbnail);
+        if (thumbnail) { saveThumbnail(docId, thumbnail); pushThumbnailToServer(docId, thumbnail); }
         toast(`Registered "${docId}".`, "success");
       } else {
         const data = await postJson("/api/register", {
@@ -339,7 +359,7 @@
           fileHash,
           fileName: file.name
         });
-        if (thumbnail) saveThumbnail(docId, thumbnail);
+        if (thumbnail) { saveThumbnail(docId, thumbnail); pushThumbnailToServer(docId, thumbnail); }
 
         toast(`Registered "${docId}". View transaction →`, "success", {
           onClick: cfg.network === "localhost" ? null : () => window.open(explorerTx(data.txHash), "_blank")
@@ -426,6 +446,7 @@
         const t = await createThumbnail(f);
         if (t) {
           saveThumbnail(docId, t);
+          pushThumbnailToServer(docId, t);
           closePreview();
           await refreshDocs();
           toast("Preview saved.", "success");

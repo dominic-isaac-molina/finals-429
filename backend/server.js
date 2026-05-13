@@ -11,7 +11,8 @@ const FRONTEND_DIR = path.join(ROOT, "frontend");
 const routes = {
   "/api/info": require("../api/info"),
   "/api/register": require("../api/register"),
-  "/api/remove": require("../api/remove")
+  "/api/remove": require("../api/remove"),
+  "/api/thumbnail": require("../api/thumbnail")
 };
 
 const types = {
